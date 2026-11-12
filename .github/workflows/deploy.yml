@@ -10,7 +10,11 @@ on:
 
 jobs:
   deploy:
+    name: Deploy to Production
     runs-on: ubuntu-latest
+
+    # Use GitHub production environment
+    environment: production
 
     steps:
       # 1. Get the latest repository code
@@ -30,11 +34,16 @@ jobs:
             -not -path "./vendor/*" \
             -print0 | xargs -0 -r -n1 php -l
 
-      # 4. Generate env.config.php using GitHub Secrets
+      # 4. Generate production environment config
       - name: Generate production config
         env:
           SAMPLE_CREDENTIAL: ${{ secrets.SAMPLE_CREDENTIAL }}
         run: |
+          if [ -z "$SAMPLE_CREDENTIAL" ]; then
+            echo "ERROR: SAMPLE_CREDENTIAL is missing!"
+            exit 1
+          fi
+
           mkdir -p config
 
           php -r '
@@ -51,8 +60,32 @@ jobs:
             );
           '
 
-      # 5. Deploy files to hosting provider
-      - name: Deploy to hosting provider
+      # 5. Validate FTP credentials
+      - name: Validate FTP configuration
+        env:
+          FTP_SERVER: ${{ secrets.FTP_SERVER }}
+          FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
+          FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+        run: |
+          if [ -z "$FTP_SERVER" ]; then
+            echo "ERROR: FTP_SERVER is missing!"
+            exit 1
+          fi
+
+          if [ -z "$FTP_USERNAME" ]; then
+            echo "ERROR: FTP_USERNAME is missing!"
+            exit 1
+          fi
+
+          if [ -z "$FTP_PASSWORD" ]; then
+            echo "ERROR: FTP_PASSWORD is missing!"
+            exit 1
+          fi
+
+          echo "FTP configuration is ready."
+
+      # 6. Deploy files to InfinityFree
+      - name: Deploy to InfinityFree
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -62,11 +95,16 @@ jobs:
           protocol: ftp
           port: 21
 
+          # InfinityFree website root directory
           server-dir: /htdocs/
 
-          # Do not upload unnecessary files
+          # Local project directory
+          local-dir: ./
+
+          # Exclude unnecessary files
           exclude: |
             **/.git*
             **/.github/**
             **/node_modules/**
             **/tests/**
+            README.md
