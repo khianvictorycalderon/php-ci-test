@@ -1,40 +1,33 @@
 
-name: Deploy PHP CI
+name: Deploy PHP CI/CD
 
 on:
   push:
     branches:
       - main
-
   workflow_dispatch:
 
 jobs:
   deploy:
-    name: Deploy to Production
+    name: Deploy to InfinityFree
     runs-on: ubuntu-latest
-
-    # Use GitHub production environment
     environment: production
 
     steps:
-      # 1. Get the latest repository code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Install PHP for syntax validation
       - name: Setup PHP
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
 
-      # 3. Check PHP syntax
       - name: Validate PHP files
         run: |
           find . -name "*.php" \
             -not -path "./vendor/*" \
             -print0 | xargs -0 -r -n1 php -l
 
-      # 4. Generate production environment config
       - name: Generate production config
         env:
           SAMPLE_CREDENTIAL: ${{ secrets.SAMPLE_CREDENTIAL }}
@@ -54,54 +47,35 @@ jobs:
             $content .= var_export($value, true);
             $content .= ";\n";
 
-            file_put_contents(
-              "config/env.config.php",
-              $content
-            );
+            file_put_contents("config/env.config.php", $content);
           '
 
-      # 5. Validate FTP credentials
-      - name: Validate FTP configuration
+      - name: Validate deployment secrets
         env:
           FTP_SERVER: ${{ secrets.FTP_SERVER }}
           FTP_USERNAME: ${{ secrets.FTP_USERNAME }}
           FTP_PASSWORD: ${{ secrets.FTP_PASSWORD }}
+          DEPLOY_DIRECTORY: ${{ secrets.DEPLOY_DIRECTORY }}
         run: |
-          if [ -z "$FTP_SERVER" ]; then
-            echo "ERROR: FTP_SERVER is missing!"
-            exit 1
-          fi
+          for name in FTP_SERVER FTP_USERNAME FTP_PASSWORD DEPLOY_DIRECTORY; do
+            if [ -z "${!name}" ]; then
+              echo "ERROR: $name is missing!"
+              exit 1
+            fi
+          done
 
-          if [ -z "$FTP_USERNAME" ]; then
-            echo "ERROR: FTP_USERNAME is missing!"
-            exit 1
-          fi
+          echo "Deployment configuration is ready."
 
-          if [ -z "$FTP_PASSWORD" ]; then
-            echo "ERROR: FTP_PASSWORD is missing!"
-            exit 1
-          fi
-
-          echo "FTP configuration is ready."
-
-      # 6. Deploy files to InfinityFree
       - name: Deploy to InfinityFree
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-
           protocol: ftp
           port: 21
-
-          # InfinityFree website root directory
-          server-dir: /htdocs/
-
-          # Local project directory
+          server-dir: ${{ secrets.DEPLOY_DIRECTORY }}
           local-dir: ./
-
-          # Exclude unnecessary files
           exclude: |
             **/.git*
             **/.github/**
