@@ -4,3 +4,4 @@
 
     echo "<h1>Hello World</h1>";
     echo "Secret: $SAMPLE_CREDENTIAL";
+    echo "Updated: Version 2";
