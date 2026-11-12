@@ -1,0 +1,72 @@
+
+name: Deploy PHP CI
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Get the latest repository code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Install PHP for syntax validation
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.2'
+
+      # 3. Check PHP syntax
+      - name: Validate PHP files
+        run: |
+          find . -name "*.php" \
+            -not -path "./vendor/*" \
+            -print0 | xargs -0 -r -n1 php -l
+
+      # 4. Generate env.config.php using GitHub Secrets
+      - name: Generate production config
+        env:
+          SAMPLE_CREDENTIAL: ${{ secrets.SAMPLE_CREDENTIAL }}
+        run: |
+          mkdir -p config
+
+          php -r '
+            $value = getenv("SAMPLE_CREDENTIAL");
+
+            $content = "<?php\n\n";
+            $content .= "\$SAMPLE_CREDENTIAL = ";
+            $content .= var_export($value, true);
+            $content .= ";\n";
+
+            file_put_contents(
+              "config/env.config.php",
+              $content
+            );
+          '
+
+      # 5. Deploy files to hosting provider
+      - name: Deploy to hosting provider
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+
+          protocol: ftp
+          port: 21
+
+          server-dir: /htdocs/
+
+          # Do not upload unnecessary files
+          exclude: |
+            **/.git*
+            **/.github/**
+            **/node_modules/**
+            **/tests/**
